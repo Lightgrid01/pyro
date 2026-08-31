@@ -1,0 +1,38 @@
+:root {
+  --bg: #0A0D12;
+  --bg-panel: #10141B;
+  --bg-panel-raised: #151A22;
+  --border: #232A35;
+  --text: #C7CDD6;
+  --text-dim: #6B7480;
+  --text-bright: #F2F4F7;
+  --verified: #4DD8C4;
+  --claimed: #F0A868;
+  --flagged: #E85D4A;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
+body {
+  min-height: 100vh;
+}
+
+a {
+  color: var(--verified);
+}
+
+#root {
+  min-height: 100vh;
+}
