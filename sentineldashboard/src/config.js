@@ -1,7 +1,13 @@
 // src/config.js — edit these if you redeploy contracts or the deployment
 // block changes. Everything else in the app reads from here.
 
-export const CREDITCOIN_RPC = "https://rpc.cc3-testnet.creditcoin.network";
+// Primary is Creditcoin's official node RPC. Fallback is thirdweb's public
+// gateway for the same chain (102031) — purpose-built for browser/dApp
+// calls, used only if the primary fails or times out.
+export const CREDITCOIN_RPC_URLS = [
+  "https://rpc.cc3-testnet.creditcoin.network",
+  "https://102031.rpc.thirdweb.com",
+];
 export const SEPOLIA_RPC = "https://ethereum-sepolia-rpc.publicnode.com";
 
 export const REGISTRY_ADDRESS = "0xa32659ec3c61E84adceF44cA34AD075949acAC97";
