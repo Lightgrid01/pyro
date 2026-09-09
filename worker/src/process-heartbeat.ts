@@ -50,7 +50,7 @@ interface SepoliaMappingEntry {
 // knows the real Sepolia tx hash (it's our own command-line input above),
 // so recording it here is a fact, not a derivation.
 function recordSepoliaMapping(sepoliaTxHash: string, entry: SepoliaMappingEntry) {
-  const mapPath = path.join(__dirname, '..', '..', 'sentineldashboard', 'public', 'sepolia-map.json');
+  const mapPath = path.join(__dirname, '..', '..', 'pyrodashboard', 'public', 'sepolia-map.json');
   let map: Record<string, SepoliaMappingEntry> = {};
 
   if (fs.existsSync(mapPath)) {
