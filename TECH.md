@@ -1,4 +1,4 @@
-# Sentinel — Technical Documentation
+# Pyro — Technical Documentation
 
 > **Hackathon-stage software.** Contracts follow standard patterns (replay
 > protection, checked external calls, no admin backdoor on scoring) but
@@ -14,12 +14,14 @@
 | .pulse(nodeId)   +---->| Precompile, 0x...FD2)+---->| .recordHeartbeat()     |
 +------------------+     +---------------------+     +------------------------+
         ^                                                       |
-        |                                                       v
-+------------------+                                  +------------------------+
-| Node simulator /  |                                  | sentinel-dashboard     |
-| real node client  |                                  | (reads live on-chain   |
-+------------------+                                  |  state, no mock data)  |
-                                                        +------------------------+
+        |                                              +--------+--------+
+        |                                              v                 v
++------------------+                          +----------------+  +--------------+
+| Node simulator /  |                          | pyrodashboard  |  | RewardGate   |
+| real node client  |                          | (reads live    |  | (eligibility |
++------------------+                          |  on-chain state,|  |  from proof) |
+                                                |  no mock data) |  +--------------+
+                                                +----------------+
 ```
 
 ## Contracts
@@ -88,11 +90,37 @@ function isSuspicious(uint256 nodeId) external view returns (bool) {
 }
 ```
 
+### `RewardGate.sol` (Creditcoin CC3 Testnet)
+
+Deployed separately at `0xa2c082140723E4436F5538761D6F765Cc1004401`, wired
+to the existing `UptimeRegistry` through a minimal read-only interface.
+This answers the question a reliability score alone doesn't: what does a
+node actually get for being verified?
+
+```solidity
+function isEligible(uint256 nodeId) public view returns (bool) {
+    (uint256 verifiedHeartbeats, , ) = REGISTRY.nodes(nodeId);
+    bool suspicious = REGISTRY.isSuspicious(nodeId);
+    return verifiedHeartbeats >= MIN_VERIFIED_FOR_ELIGIBILITY && !suspicious;
+}
+```
+
+Deploying it required no changes to `UptimeRegistry` or `HeartbeatBeacon`
+— it's purely additive, so the already-proven transaction history on both
+contracts is untouched. Confirmed live on real chain data:
+`isEligible(1)` returns `true` (a genuinely verified node), `isEligible(99)`
+returns `false` (a flagged node). This is a concrete, on-chain,
+ungameable eligibility decision, not a UI label — nothing about it can be
+set directly; it only ever follows from `UptimeRegistry`'s own verified
+state. A separate `checkAndRecord()` function does the same check but
+emits an event, for a dashboard or indexer that wants an on-chain record
+of eligibility checks rather than a silent view call.
+
 ## Why atomic verification matters here
 
 A weaker design would have the off-chain worker verify the proof itself
 and then just tell the contract "this one's good, trust me." That
-reintroduces exactly the trust problem Sentinel exists to remove — a
+reintroduces exactly the trust problem Pyro exists to remove — a
 centralized process asserting truth. By calling the precompile directly
 inside `recordHeartbeat()`, verification and state change happen in the
 same transaction: there is no step where you have to trust anything other
@@ -102,7 +130,7 @@ than the chain itself.
 
 `worker/src/worker.ts` (continuous) and
 `worker/src/process-heartbeat.ts` (one-shot, used for the demo) both
-follow the same flow, using `@gluwa/usc-sdk`'s `ProofBuilder`:
+follow the same core flow, using `@gluwa/usc-sdk`'s `ProofBuilder`:
 
 1. Detect a `Heartbeat` event on Sepolia (or take a known tx hash).
 2. `proofBuilder.waitUntilHeightAttested(chainKey, blockNumber)` — polls
@@ -114,6 +142,31 @@ follow the same flow, using `@gluwa/usc-sdk`'s `ProofBuilder`:
 The worker holds no special authority — it's a relayer, not a trusted
 party. Anyone could run this same code and submit the same proof; nothing
 about the design depends on this specific worker instance being honest.
+
+### Production hardening (`worker.ts`)
+
+Unlike `process-heartbeat.ts` (a one-shot script for the demo), the
+continuous worker is built to run unattended and long-term:
+
+- **Crash-resume state** — persists `lastScannedBlock` and a per-transaction
+  outcome (`done`/`failed`) to `worker-state.json`. On startup, it runs a
+  catch-up scan for anything missed while it was offline before attaching
+  a live listener for new events. A restart never reprocesses a completed
+  heartbeat and never silently misses one that happened while it was down.
+  Confirmed on real testnet data: a restart correctly resumed from a
+  specific prior block and reported "Catch-up scan found 0 heartbeat(s)
+  since last run" rather than rescanning blindly.
+- **Bounded retry with backoff** — the proof-wait/submit step gets up to 5
+  attempts with exponential backoff (2s, 4s, 8s...) before a heartbeat is
+  marked failed for manual review, instead of being permanently lost to a
+  single transient RPC error.
+- **Graceful shutdown** — `SIGINT`/`SIGTERM` stop new work, save state, and
+  exit cleanly. Confirmed: `Ctrl+C` printed "Received SIGINT. Finishing
+  in-flight work and saving state... State saved. Shutting down cleanly."
+  and returned control immediately, with no forced kill.
+
+This is what makes it realistic to run as a background service (pm2,
+systemd, a container) rather than a script that has to be babysat.
 
 ## Security considerations
 
@@ -128,6 +181,9 @@ about the design depends on this specific worker instance being honest.
 - **No admin backdoor on scoring** — there is no owner-only function that
   can directly set `verifiedHeartbeats`; the only path to a higher score
   is through a real, verified proof.
+- **RewardGate has no write path at all** — it's read-only by design, so
+  there's no function anywhere that could set eligibility directly; it can
+  only ever be derived from `UptimeRegistry`'s existing verified state.
 
 ## Roadmap
 
@@ -139,15 +195,10 @@ Known next steps, in rough priority order:
 - **Multi-source-chain support** — `INativeQueryVerifier` is already
   chain-agnostic; adding a second supported source chain (beyond Sepolia)
   is a config change to the worker and a new `chainKey`, not a redesign.
-- **Worker resilience** — crash-resume state persistence (last processed
-  block, pending/done heartbeats), bounded retry with backoff, and graceful
-  shutdown on SIGINT/SIGTERM. The current worker is correct but minimal;
-  a production deployment would run it as a hardened long-lived service
-  rather than a one-shot script.
-- **Reward/incentive layer** — the dashboard's reliability tiers are
-  currently a read-only view over verified state. A natural extension is
-  making tier eligibility gate an actual on-chain reward or stake
-  mechanism, not just a UI badge.
+- **On-chain reward distribution** — `RewardGate` currently answers "is
+  this node eligible," as a view function. A natural next step is having
+  it actually gate a claim or distribution function, not just report
+  eligibility for something built on top of it later.
 - **Multi-verifier consensus for high-stakes nodes** — for nodes where a
   false positive matters more, require agreement from more than one
   independent worker before crediting a heartbeat, rather than trusting
@@ -159,13 +210,11 @@ Known next steps, in rough priority order:
   calling `pulse()` — there's no on-chain identity binding yet (see
   Roadmap above: node identity binding is the fix, similar to how
   HashCredit binds a BTC address via `claimBtcAddress()`).
-- Tiers shown in the dashboard are computed client-side from verified
-  on-chain data, not stored on-chain themselves. This was a deliberate
-  choice, not an oversight — adding it on-chain would have meant
-  redeploying `UptimeRegistry` this late in the build, losing the
-  already-proven live transaction history. The tradeoff: tiers are
-  transparent and reproducible by anyone reading the same on-chain data,
-  just not enforced by the contract itself yet.
+- The dashboard's Bronze/Silver/Gold tier labels remain a client-side,
+  cosmetic grouping over verified heartbeat counts — not stored or
+  enforced on-chain. This is separate from reward *eligibility*, which
+  now is a real on-chain fact via `RewardGate` (see above); the tier
+  labels are just a friendlier display on top of the same verified data.
 - Currently one source chain (Sepolia) is wired up end-to-end, even
   though the underlying verifier interface already supports more (see
   Roadmap above).
