@@ -4,7 +4,7 @@ import { CREDITCOIN_EXPLORER_TX, BEACON_ADDRESS, REGISTRY_ADDRESS } from "../con
 export function ProofFlowHero({ latestVerified, status }) {
   return (
     <section className="hero">
-      <div className="hero__eyebrow">ATTESTCOIN PROTOCOL — LIVE ON CC3 TESTNET</div>
+      <div className="hero__eyebrow">Live on Creditcoin, powered by the Attestcoin Protocol</div>
       <h1 className="hero__title">
         A node can claim uptime.
         <br />
@@ -18,29 +18,21 @@ export function ProofFlowHero({ latestVerified, status }) {
 
       <div className="proof-chain">
         <div className="proof-chain__stage">
-          <div className="proof-chain__label">1 · SOURCE</div>
+          <div className="proof-chain__label">Source</div>
           <div className="proof-chain__name">Ethereum Sepolia</div>
           <div className="proof-chain__detail">HeartbeatBeacon.pulse()</div>
           <div className="proof-chain__addr">{shorten(BEACON_ADDRESS)}</div>
         </div>
 
-        <div className="proof-chain__arrow" data-active={status === "live"}>
-          <span>inclusion proof</span>
-        </div>
-
         <div className="proof-chain__stage">
-          <div className="proof-chain__label">2 · VERIFY</div>
+          <div className="proof-chain__label">Verify</div>
           <div className="proof-chain__name">Block Prover Precompile</div>
           <div className="proof-chain__detail">verifyAndEmit()</div>
           <div className="proof-chain__addr">0x...0FD2</div>
         </div>
 
-        <div className="proof-chain__arrow" data-active={status === "live"}>
-          <span>on success</span>
-        </div>
-
         <div className="proof-chain__stage">
-          <div className="proof-chain__label">3 · SCORE</div>
+          <div className="proof-chain__label">Score</div>
           <div className="proof-chain__name">UptimeRegistry</div>
           <div className="proof-chain__detail">
             {latestVerified ? (
@@ -49,10 +41,10 @@ export function ProofFlowHero({ latestVerified, status }) {
                 target="_blank"
                 rel="noreferrer"
               >
-                latest: node {latestVerified.nodeId} ↗
+                Latest: node {latestVerified.nodeId}
               </a>
             ) : (
-              "waiting for first proof..."
+              "Waiting for the first proof"
             )}
           </div>
           <div className="proof-chain__addr">{shorten(REGISTRY_ADDRESS)}</div>

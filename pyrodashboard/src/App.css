@@ -25,12 +25,11 @@
   gap: 10px;
 }
 
-.topbar__mark {
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  background: var(--verified);
-  box-shadow: 0 0 12px var(--verified);
+.topbar__logo {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  object-fit: cover;
 }
 
 .topbar__status {
@@ -100,17 +99,16 @@
 .proof-chain {
   display: flex;
   align-items: stretch;
-  gap: 0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--bg-panel);
+  gap: 12px;
 }
 
 .proof-chain__stage {
   flex: 1;
-  padding: 20px;
+  padding: 18px 20px;
   min-width: 0;
+  background: var(--bg-panel);
+  border-radius: 999px;
+  text-align: center;
 }
 
 .proof-chain__label {
@@ -142,36 +140,125 @@
   color: var(--text-dim);
 }
 
-.proof-chain__arrow {
-  width: 90px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-left: 1px dashed var(--border);
-  border-right: 1px dashed var(--border);
-  background: var(--bg-panel-raised);
-  position: relative;
+/* ---------- Verify lookup ---------- */
+.verify-lookup {
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  border-radius: 28px;
+  padding: 20px 24px;
+  margin-bottom: 32px;
 }
 
-.proof-chain__arrow span {
-  font-size: 9px;
-  letter-spacing: 0.08em;
+.verify-lookup__label {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--verified);
+  margin-bottom: 8px;
+}
+
+.verify-lookup__hint {
+  font-size: 13px;
   color: var(--text-dim);
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
+  line-height: 1.6;
+  margin: 0 0 16px;
+  max-width: 640px;
 }
 
-.proof-chain__arrow[data-active="true"] {
-  background: linear-gradient(180deg, var(--bg-panel-raised), rgba(77, 216, 196, 0.08));
+.verify-lookup__form {
+  display: flex;
+  gap: 10px;
+}
+
+.verify-lookup__input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-bright);
+}
+
+.verify-lookup__input:focus {
+  outline: none;
+  border-color: var(--verified);
+}
+
+.verify-lookup__button {
+  background: var(--verified);
+  color: #06110f;
+  border: none;
+  border-radius: 999px;
+  padding: 10px 22px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.verify-lookup__button:hover {
+  opacity: 0.9;
+}
+
+.verify-lookup__result {
+  margin-top: 16px;
+  padding: 14px 20px;
+  border-radius: 24px;
+  border: 1px solid var(--border);
+}
+
+.verify-lookup__result--found {
+  border-color: var(--verified);
+  background: rgba(77, 216, 196, 0.06);
+}
+
+.verify-lookup__result--not-found {
+  border-color: var(--claimed);
+  background: rgba(240, 168, 104, 0.06);
+}
+
+.verify-lookup__result-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 6px;
+  color: var(--text-bright);
+}
+
+.verify-lookup__result-detail {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.verify-lookup__result-links {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+  font-size: 11px;
+}
+
+@media (max-width: 480px) {
+  .verify-lookup {
+    padding: 16px;
+  }
+  .verify-lookup__form {
+    flex-direction: column;
+  }
+  .verify-lookup__button {
+    width: 100%;
+  }
 }
 
 /* ---------- Error banner ---------- */
 .error-banner {
   border: 1px solid var(--flagged);
   color: var(--flagged);
-  padding: 12px 16px;
-  border-radius: 6px;
+  padding: 12px 20px;
+  border-radius: 999px;
   font-size: 12px;
   margin-bottom: 24px;
 }
@@ -193,17 +280,6 @@
   }
   .proof-chain {
     flex-direction: column;
-  }
-  .proof-chain__arrow {
-    width: 100%;
-    height: 28px;
-    border-left: none;
-    border-right: none;
-    border-top: 1px dashed var(--border);
-    border-bottom: 1px dashed var(--border);
-  }
-  .proof-chain__arrow span {
-    writing-mode: horizontal-tb;
   }
 }
 
@@ -270,14 +346,14 @@
   font-size: 13px;
   padding: 24px;
   border: 1px dashed var(--border);
-  border-radius: 8px;
+  border-radius: 24px;
 }
 
 /* ---------- Pulse node card ---------- */
 .pulse-node {
   border: 1px solid var(--border);
   background: var(--bg-panel);
-  border-radius: 8px;
+  border-radius: 24px;
   padding: 16px;
   transition: border-color 0.2s;
 }
@@ -305,8 +381,8 @@
 .pulse-node__badge {
   font-size: 9px;
   letter-spacing: 0.08em;
-  padding: 3px 7px;
-  border-radius: 3px;
+  padding: 3px 10px;
+  border-radius: 999px;
 }
 
 .pulse-node__badge--ok {
@@ -379,9 +455,9 @@
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.04em;
-  padding: 2px 8px;
+  padding: 2px 10px;
   border: 1px solid;
-  border-radius: 3px;
+  border-radius: 999px;
 }
 
 .pulse-node__meta {
@@ -393,8 +469,8 @@
 .feed {
   border: 1px solid var(--border);
   background: var(--bg-panel);
-  border-radius: 8px;
-  padding: 16px;
+  border-radius: 24px;
+  padding: 16px 20px;
   position: sticky;
   top: 20px;
 }

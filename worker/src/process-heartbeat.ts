@@ -37,6 +37,38 @@ function resolveRegistryAddress(): string {
   throw new Error('No REGISTRY_ADDRESS set and no deployed-address.json found in contracts-creditcoin.');
 }
 
+interface SepoliaMappingEntry {
+  nodeId: string;
+  creditcoinTxHash: string;
+  verifiedCount: number;
+  sourceTimestamp: number;
+}
+
+// Written directly into the dashboard's public folder, next to it as a
+// sibling project — the dashboard just fetches this static file, no
+// on-chain decoding required. This script is the one place that genuinely
+// knows the real Sepolia tx hash (it's our own command-line input above),
+// so recording it here is a fact, not a derivation.
+function recordSepoliaMapping(sepoliaTxHash: string, entry: SepoliaMappingEntry) {
+  const mapPath = path.join(__dirname, '..', '..', 'sentineldashboard', 'public', 'sepolia-map.json');
+  let map: Record<string, SepoliaMappingEntry> = {};
+
+  if (fs.existsSync(mapPath)) {
+    try {
+      map = JSON.parse(fs.readFileSync(mapPath, 'utf8'));
+    } catch {
+      console.warn('sepolia-map.json existed but was not valid JSON — starting fresh.');
+      map = {};
+    }
+  }
+
+  map[sepoliaTxHash.toLowerCase()] = entry;
+
+  fs.mkdirSync(path.dirname(mapPath), { recursive: true });
+  fs.writeFileSync(mapPath, JSON.stringify(map, null, 2));
+  console.log('Recorded Sepolia hash mapping to', mapPath);
+}
+
 async function main() {
   const txHash = process.argv[2];
   if (!txHash) {
@@ -91,6 +123,17 @@ async function main() {
     console.log('   nodeId:', parsedEvent.args.nodeId.toString());
     console.log('   sourceTimestamp:', parsedEvent.args.sourceTimestamp.toString());
     console.log('   verifiedCount:', parsedEvent.args.verifiedCount.toString());
+
+    // Record the Sepolia hash -> verification mapping directly, since this
+    // script is the one place that genuinely knows the real Sepolia tx hash
+    // (it's our own input above). No decoding, no derivation — just the
+    // facts, written where the dashboard can read them.
+    recordSepoliaMapping(txHash, {
+      nodeId: parsedEvent.args.nodeId.toString(),
+      creditcoinTxHash: submitTx.hash,
+      verifiedCount: Number(parsedEvent.args.verifiedCount),
+      sourceTimestamp: Number(parsedEvent.args.sourceTimestamp),
+    });
   } else {
     console.log('\n⚠️  No HeartbeatVerified event found in the receipt logs — check manually.');
   }

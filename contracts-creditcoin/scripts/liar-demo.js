@@ -4,12 +4,15 @@
 //
 // Usage:
 //   npx hardhat run scripts/liar-demo.js --network creditcoin_testnet
+//
+// Pick a node ID via env var (defaults to 99) — no editing this file needed:
+//   set LIAR_NODE_ID=299 && npx hardhat run scripts/liar-demo.js --network creditcoin_testnet
 
 const hre = require("hardhat");
 const fs = require("fs");
 const path = require("path");
 
-const LIAR_NODE_ID = 99;
+const LIAR_NODE_ID = Number(process.env.LIAR_NODE_ID || "99");
 
 async function main() {
   const addressPath = path.join(__dirname, "..", "deployed-address.json");

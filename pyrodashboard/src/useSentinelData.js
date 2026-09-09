@@ -8,7 +8,7 @@ import { CREDITCOIN_RPC_URLS, REGISTRY_ADDRESS, REGISTRY_ABI, START_BLOCK, POLL_
 const CHUNK_SIZE = 4000;
 const CONCURRENCY = 6;
 
-const STORAGE_KEY = "sentinel-scan-state-v1";
+const STORAGE_KEY = "sentinel-scan-state-v5"; // v5: dropped the Sepolia-hash derivation (unreliable decode), back to a simpler, proven-correct shape
 
 function loadPersistedState() {
   try {
@@ -18,7 +18,7 @@ function loadPersistedState() {
     if (typeof parsed.lastScannedBlock !== "number") return null;
     return parsed;
   } catch {
-    return null; // corrupted or unavailable — fall back to a fresh scan
+    return null;
   }
 }
 
@@ -40,19 +40,23 @@ function savePersistedState(lastScannedBlock, nodesMap, events) {
 export function useSentinelData() {
   const [nodes, setNodes] = useState([]);
   const [events, setEvents] = useState([]);
-  const [status, setStatus] = useState("connecting"); // connecting | live | error
+  const [status, setStatus] = useState("connecting");
   const [error, setError] = useState(null);
 
   const providerRef = useRef(null);
   const contractRef = useRef(null);
-  const lastScannedBlockRef = useRef(null); // null until the first successful scan
-  const nodesMapRef = useRef(new Map());    // id -> node data, persists across polls
-  const eventsRef = useRef([]);             // running list, persists across polls
+  const lastScannedBlockRef = useRef(null);
+  const nodesMapRef = useRef(new Map());
+  const eventsRef = useRef([]);
 
-  // Load whatever this browser already scanned before, so a page refresh
-  // doesn't pay the full historical-scan cost again. Doesn't help a
-  // judge's very first visit — see the progressive-publish logic below
-  // for that case.
+  const publishState = useCallback(() => {
+    const nodeList = Array.from(nodesMapRef.current.values()).sort(
+      (a, b) => Number(a.id) - Number(b.id)
+    );
+    setNodes(nodeList);
+    setEvents([...eventsRef.current].sort((a, b) => b.blockNumber - a.blockNumber).slice(0, 12));
+  }, []);
+
   useEffect(() => {
     const persisted = loadPersistedState();
     if (persisted) {
@@ -61,15 +65,14 @@ export function useSentinelData() {
       eventsRef.current = persisted.events;
       publishState();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [publishState]);
 
   const connect = useCallback(async () => {
     let lastErr;
     for (const url of CREDITCOIN_RPC_URLS) {
       try {
         const provider = new JsonRpcProvider(url);
-        await provider.getBlockNumber(); // cheap connectivity check
+        await provider.getBlockNumber();
         providerRef.current = provider;
         contractRef.current = new Contract(REGISTRY_ADDRESS, REGISTRY_ABI, provider);
         return provider;
@@ -86,14 +89,6 @@ export function useSentinelData() {
     }
     return contractRef.current;
   }, [connect]);
-
-  const publishState = useCallback(() => {
-    const nodeList = Array.from(nodesMapRef.current.values()).sort(
-      (a, b) => Number(a.id) - Number(b.id)
-    );
-    setNodes(nodeList);
-    setEvents([...eventsRef.current].sort((a, b) => b.blockNumber - a.blockNumber).slice(0, 12));
-  }, []);
 
   const refreshNodeStates = useCallback(async (contract, nodeIds) => {
     await Promise.all(
@@ -113,10 +108,6 @@ export function useSentinelData() {
     );
   }, []);
 
-  // Processes one batch's logs immediately: updates node state, appends
-  // events, and publishes to the UI right away — this is what makes real
-  // data show up within the first couple seconds instead of only after
-  // the entire (possibly huge, mostly-empty) range finishes scanning.
   const processBatch = useCallback(
     async (contract, verified, claimed) => {
       const newNodeIds = new Set();
@@ -133,6 +124,7 @@ export function useSentinelData() {
           nodeId: log.args.nodeId.toString(),
           txHash: log.transactionHash,
           blockNumber: log.blockNumber,
+          verifiedCount: Number(log.args.verifiedCount),
         })),
         ...claimed.map((log) => ({
           type: "claimed",
@@ -147,8 +139,6 @@ export function useSentinelData() {
 
       if (newNodeIds.size > 0 || newEvents.length > 0) {
         publishState();
-        // Mark live as soon as we have ANY real data to show — don't
-        // make the UI wait for the full range to finish scanning.
         setStatus("live");
         setError(null);
       }
@@ -156,11 +146,6 @@ export function useSentinelData() {
     [refreshNodeStates, publishState]
   );
 
-  // Scans [fromBlock, toBlock] in bounded chunks, fired in concurrency-capped
-  // batches. Each batch is processed (and published to the UI) as soon as
-  // it completes — the scan keeps going in the background, but the person
-  // looking at the page sees real data almost immediately instead of
-  // waiting for the entire range to finish.
   const scanRange = useCallback(
     async (contract, fromBlock, toBlock) => {
       const chunkStarts = [];
@@ -208,15 +193,12 @@ export function useSentinelData() {
         savePersistedState(lastScannedBlockRef.current, nodesMapRef.current, eventsRef.current);
         setStatus("live");
         setError(null);
-        return; // success — stop retrying
+        return;
       } catch (err) {
         console.error(`Sentinel data fetch failed (attempt ${attempt}/${MAX_ATTEMPTS}):`, err);
         contractRef.current = null;
         providerRef.current = null;
 
-        // Only show an error if we have nothing at all to display —
-        // if a prior batch already published real data, keep showing
-        // that instead of flashing an error over good data.
         if (attempt === MAX_ATTEMPTS) {
           if (nodesMapRef.current.size === 0) {
             setStatus("error");
