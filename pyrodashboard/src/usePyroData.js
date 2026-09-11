@@ -1,14 +1,24 @@
-// src/useSentinelData.js
+// src/usePyroData.js
 import { useEffect, useState, useCallback, useRef } from "react";
 import { JsonRpcProvider, Contract } from "ethers";
-import { CREDITCOIN_RPC_URLS, REGISTRY_ADDRESS, REGISTRY_ABI, START_BLOCK, POLL_INTERVAL_MS } from "./config";
+import {
+  CREDITCOIN_RPC_URLS,
+  REGISTRY_ADDRESS,
+  REGISTRY_ABI,
+  REWARD_GATE_ADDRESS,
+  REWARD_GATE_ABI,
+  START_BLOCK,
+  POLL_INTERVAL_MS,
+} from "./config";
 
 // Public RPCs commonly cap/slow down on very large eth_getLogs ranges.
 // Scan history in bounded windows instead of one massive range.
 const CHUNK_SIZE = 4000;
 const CONCURRENCY = 6;
 
-const STORAGE_KEY = "sentinel-scan-state-v5"; // v5: dropped the Sepolia-hash derivation (unreliable decode), back to a simpler, proven-correct shape
+// v6: node objects now include rewardEligible — bumped so a browser with an
+// older cached shape doesn't silently skip that field forever.
+const STORAGE_KEY = "pyro-scan-state-v6";
 
 function loadPersistedState() {
   try {
@@ -37,14 +47,15 @@ function savePersistedState(lastScannedBlock, nodesMap, events) {
   }
 }
 
-export function useSentinelData() {
+export function usePyroData() {
   const [nodes, setNodes] = useState([]);
   const [events, setEvents] = useState([]);
   const [status, setStatus] = useState("connecting");
   const [error, setError] = useState(null);
 
   const providerRef = useRef(null);
-  const contractRef = useRef(null);
+  const registryRef = useRef(null);
+  const rewardGateRef = useRef(null);
   const lastScannedBlockRef = useRef(null);
   const nodesMapRef = useRef(new Map());
   const eventsRef = useRef([]);
@@ -74,7 +85,8 @@ export function useSentinelData() {
         const provider = new JsonRpcProvider(url);
         await provider.getBlockNumber();
         providerRef.current = provider;
-        contractRef.current = new Contract(REGISTRY_ADDRESS, REGISTRY_ABI, provider);
+        registryRef.current = new Contract(REGISTRY_ADDRESS, REGISTRY_ABI, provider);
+        rewardGateRef.current = new Contract(REWARD_GATE_ADDRESS, REWARD_GATE_ABI, provider);
         return provider;
       } catch (err) {
         lastErr = err;
@@ -84,18 +96,19 @@ export function useSentinelData() {
   }, []);
 
   const getContract = useCallback(async () => {
-    if (!contractRef.current) {
+    if (!registryRef.current) {
       await connect();
     }
-    return contractRef.current;
+    return registryRef.current;
   }, [connect]);
 
   const refreshNodeStates = useCallback(async (contract, nodeIds) => {
     await Promise.all(
       Array.from(nodeIds).map(async (id) => {
-        const [nodeStatus, suspicious] = await Promise.all([
+        const [nodeStatus, suspicious, rewardEligible] = await Promise.all([
           contract.nodes(id),
           contract.isSuspicious(id),
+          rewardGateRef.current.isEligible(id),
         ]);
         nodesMapRef.current.set(id, {
           id,
@@ -103,6 +116,7 @@ export function useSentinelData() {
           claimedHeartbeats: Number(nodeStatus.claimedHeartbeats),
           lastVerifiedTimestamp: Number(nodeStatus.lastVerifiedTimestamp),
           suspicious,
+          rewardEligible,
         });
       })
     );
@@ -195,8 +209,9 @@ export function useSentinelData() {
         setError(null);
         return;
       } catch (err) {
-        console.error(`Sentinel data fetch failed (attempt ${attempt}/${MAX_ATTEMPTS}):`, err);
-        contractRef.current = null;
+        console.error(`Pyro data fetch failed (attempt ${attempt}/${MAX_ATTEMPTS}):`, err);
+        registryRef.current = null;
+        rewardGateRef.current = null;
         providerRef.current = null;
 
         if (attempt === MAX_ATTEMPTS) {

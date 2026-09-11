@@ -1,3 +1,19 @@
+/* ---------- Page background ---------- */
+/* Full-viewport, independent of .app's max-width, so there's no visible
+   edge/seam on wide screens. Dark overlay keeps the pulse-node colors
+   (teal/amber/red) exactly as legible as before — the photo adds mood,
+   it doesn't compete with the data. */
+body {
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(rgba(10, 13, 18, 0.87), rgba(10, 13, 18, 0.93)),
+    url('/pyro-bg.jpg');
+  background-size: cover;
+  background-position: left center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
 .app {
   max-width: 1200px;
   margin: 0 auto;
@@ -26,10 +42,11 @@
 }
 
 .topbar__logo {
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  object-fit: cover;
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  /* No border-radius, no background — the mark stands on its own against
+     the page background now that its own background is transparent. */
 }
 
 .topbar__status {

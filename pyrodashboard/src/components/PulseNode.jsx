@@ -3,7 +3,7 @@ import { buildPulsePath } from "../waveform";
 import { getTier } from "../tiers";
 
 export function PulseNode({ node }) {
-  const { id, verifiedHeartbeats, claimedHeartbeats, lastVerifiedTimestamp, suspicious } = node;
+  const { id, verifiedHeartbeats, claimedHeartbeats, lastVerifiedTimestamp, suspicious, rewardEligible } = node;
 
   const verifiedPath = buildPulsePath(verifiedHeartbeats || 0);
   const claimedPath = buildPulsePath(claimedHeartbeats || 0);
@@ -44,6 +44,9 @@ export function PulseNode({ node }) {
         <span className="pulse-node__tier" style={{ color: tier.color, borderColor: tier.color }}>
           {tier.name} tier
         </span>
+        {rewardEligible && (
+          <span className="pulse-node__badge pulse-node__badge--ok">Reward eligible</span>
+        )}
         <span className="pulse-node__meta">last proof: {lastSeen}</span>
       </div>
     </div>

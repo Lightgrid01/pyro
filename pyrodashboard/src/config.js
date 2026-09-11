@@ -13,6 +13,11 @@ export const SEPOLIA_RPC = "https://ethereum-sepolia-rpc.publicnode.com";
 export const REGISTRY_ADDRESS = "0xa32659ec3c61E84adceF44cA34AD075949acAC97";
 export const BEACON_ADDRESS = "0xD3A97BcE1b0964e2959a08d37EE7F3A030CAED4c";
 
+// Additive contract — reads UptimeRegistry's own verified state, doesn't
+// touch or redeploy it. Turns a reliability score into a real, on-chain
+// reward-pool eligibility fact.
+export const REWARD_GATE_ADDRESS = "0xa2c082140723E4436F5538761D6F765Cc1004401";
+
 // Approximate Creditcoin block the registry was deployed at — event scans
 // start here instead of block 0, since CC3 Testnet already has millions of
 // blocks of unrelated history. Safe to move this earlier if it's ever wrong;
@@ -29,4 +34,8 @@ export const REGISTRY_ABI = [
   "event HeartbeatClaimed(uint256 indexed nodeId, uint256 claimedCount)",
   "function nodes(uint256) view returns (uint256 verifiedHeartbeats, uint256 lastVerifiedTimestamp, uint256 claimedHeartbeats)",
   "function isSuspicious(uint256) view returns (bool)",
+];
+
+export const REWARD_GATE_ABI = [
+  "function isEligible(uint256 nodeId) view returns (bool)",
 ];

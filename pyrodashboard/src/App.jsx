@@ -1,4 +1,4 @@
-import { useSentinelData } from "./useSentinelData";
+import { usePyroData } from "./usePyroData";
 import { useSepoliaMap } from "./useSepoliaMap";
 import { ProofFlowHero } from "./components/ProofFlowHero";
 import { VerifyLookup } from "./components/VerifyLookup";
@@ -7,7 +7,7 @@ import { LiveFeed } from "./components/LiveFeed";
 import "./App.css";
 
 function App() {
-  const { nodes, events, status, error } = useSentinelData();
+  const { nodes, events, status, error } = usePyroData();
   const { lookup: lookupSepoliaTx } = useSepoliaMap();
   const latestVerified = events.find((e) => e.type === "verified");
 
@@ -15,7 +15,7 @@ function App() {
     <div className="app">
       <header className="topbar">
         <div className="topbar__brand">
-          <img src="/logo.jpg" alt="Pyro" className="topbar__logo" />
+          <img src="/logo.png" alt="Pyro" className="topbar__logo" />
           Pyro
         </div>
         <div className={`topbar__status topbar__status--${status}`}>
