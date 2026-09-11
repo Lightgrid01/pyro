@@ -1,4 +1,4 @@
-# Sentinel
+# Pyro
 
 **An attested uptime registry for DePIN networks, built on the Attestcoin Protocol.**
 
