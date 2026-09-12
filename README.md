@@ -2,12 +2,12 @@
 
 **An attested uptime registry for DePIN networks, built on the Attestcoin Protocol.**
 
-DePIN networks (decentralized physical infrastructure — sensor networks, node
+DePIN networks (decentralized physical infrastructure; sensor networks, node
 operators, hardware providers) have a trust problem: most reward systems
-just trust whatever a node self-reports about its uptime. Nothing stops an
+just trust whatever a node self reports about its uptime. Nothing stops an
 operator from lying to farm rewards.
 
-Sentinel fixes this by requiring every uptime claim to be backed by a real,
+Pyro fixes this by requiring every uptime claim to be backed by a real,
 cryptographically verified cross-chain transaction — not a self-report.
 
 ```
@@ -21,6 +21,9 @@ UptimeRegistry on Creditcoin credits verified uptime
         |
         v
 A node that only self-reports (no real tx) gets flagged automatically
+        |
+        v
+RewardGate reads that verified state and decides real reward-pool eligibility
 ```
 
 ## The problem
@@ -34,28 +37,33 @@ lying, without a centralized auditor.
 
 ## The solution
 
-Sentinel requires every uptime claim to be backed by a real transaction on
+Pyro requires every uptime claim to be backed by a real transaction on
 a source chain (Ethereum Sepolia), verified through Creditcoin's Attestcoin
 Protocol before it counts toward a node's score.
 
 1. A node proves liveness by sending a transaction to `HeartbeatBeacon` on
-   Sepolia — a real, mined transaction, not a signed message or an API call.
+   Sepolia, a real, mined transaction, not a signed message or an API call.
 2. An off-chain worker waits for Creditcoin to attest the block containing
    that transaction, then fetches a real inclusion proof from Attestcoin's
    proof service.
 3. The proof is submitted to `UptimeRegistry`, an Attestcoin Smart Contract
    (ASC) on Creditcoin. The contract calls the Block Prover Precompile to
-   verify the proof **in the same transaction** — synchronous, one block,
+   verify the proof **in the same transaction**  synchronous, one block,
    no async waiting, no oracle, no bridge.
 4. Only after verification succeeds does the node's `verifiedHeartbeats`
    count increase.
 5. Nodes can also self-report claims (`reportClaimedHeartbeat`) with no
-   proof required — this exists specifically so the contract can compare
+   proof required  this exists specifically so the contract can compare
    claimed vs. verified and flag nodes whose claims outpace their proof
    (`isSuspicious()`).
+6. `RewardGate`, a separate additive contract, reads that verified state
+   and answers the question a score alone doesn't: whether a node actually
+   qualifies for a reward pool. It's read-only and gets nothing set
+   directly — eligibility only ever follows from `UptimeRegistry`'s real
+   verified counters.
 
 This has been proven end-to-end on live testnets, not just designed on
-paper — see **Proof it works**, below.
+paper see **Proof it works**, below.
 
 ## Attestcoin Protocol integration
 
@@ -83,6 +91,8 @@ This is the core of the project, not a bolted-on feature.
   `worker/src/process-heartbeat.ts`) uses `@gluwa/usc-sdk`'s
   `ProofBuilder` to wait for attestation and fetch the real Merkle +
   continuity proof, exactly as documented in Creditcoin's SDK reference.
+  `worker.ts` is built for unattended, long-running operation — crash-resume
+  state, retry with backoff, graceful shutdown — see `TECH.md` for detail.
 
 Full technical detail: [`TECH.md`](./TECH.md) (contract-by-contract
 breakdown, gas notes, and design decisions).
@@ -102,21 +112,31 @@ behind them was correctly flagged: `isSuspicious(99)` returns `true`,
 `verifiedHeartbeats: 0`, `claimedHeartbeats: 3` — all on-chain, no manual
 intervention.
 
+`RewardGate` was checked against both real cases: `isEligible(1)` returns
+`true` (a genuinely verified node), `isEligible(99)` returns `false` (the
+flagged one) — a concrete, ungameable eligibility decision, not a UI label.
+
 ## Deployed contracts
 
 | Contract | Network | Address |
 | --- | --- | --- |
 | `HeartbeatBeacon` | Ethereum Sepolia | [`0xD3A97BcE1b0964e2959a08d37EE7F3A030CAED4c`](https://sepolia.etherscan.io/address/0xD3A97BcE1b0964e2959a08d37EE7F3A030CAED4c) |
 | `UptimeRegistry` (ASC) | Creditcoin CC3 Testnet | [`0xa32659ec3c61E84adceF44cA34AD075949acAC97`](https://creditcoin-testnet.blockscout.com/address/0xa32659ec3c61E84adceF44cA34AD075949acAC97) |
+| `RewardGate` | Creditcoin CC3 Testnet | [`0xa2c082140723E4436F5538761D6F765Cc1004401`](https://creditcoin-testnet.blockscout.com/address/0xa2c082140723E4436F5538761D6F765Cc1004401) |
+
+## Live demo
+
+**(pyrocc3.vercel.app)** reads live on-chain state,
+no mock data.
 
 ## Project structure
 
 ```
-contracts-sepolia/     HeartbeatBeacon.sol — the liveness ping nodes send
-contracts-creditcoin/  UptimeRegistry.sol — the ASC that verifies proofs
-worker/                Off-chain proof pipeline (watches, verifies, submits)
+contracts-sepolia/     HeartbeatBeacon.sol; the liveness ping nodes send
+contracts-creditcoin/  UptimeRegistry.sol (the ASC) + RewardGate.sol (reward eligibility)
+worker/                Off-chain proof pipeline — worker.ts (hardened, continuous) and process-heartbeat.ts (one-shot demo script)
 simulator/              Simulates a small fleet of nodes, incl. a "liar" node
-sentinel-dashboard/     Live control-room UI reading real on-chain state
+pyrodashboard/          Live control-room UI reading real on-chain state
 ```
 
 ## Running it locally
@@ -130,22 +150,25 @@ cd contracts-sepolia && npm install && npx hardhat run scripts/deploy.js --netwo
 # 2. Deploy the registry (Creditcoin) — auto-picks up the beacon address
 cd ..\contracts-creditcoin && npm install && npx hardhat run scripts/deploy.js --network creditcoin_testnet
 
-# 3. Send a real heartbeat
+# 3. Deploy RewardGate  auto-picks up the registry address
+npx hardhat run scripts/deploy-reward-gate.js --network creditcoin_testnet
+
+# 4. Send a real heartbeat
 cd ..\contracts-sepolia && npx hardhat run scripts/pulse.js --network sepolia
 
-# 4. Process it through Attestcoin
-cd ..\worker && npm install && npx ts-node src/process-heartbeat.ts <tx-hash-from-step-3>
+# 5. Process it through Attestcoin
+cd ..\worker && npm install && npx ts-node src/process-heartbeat.ts <tx-hash-from-step-4>
 
-# 5. View it live
-cd ..\sentinel-dashboard && npm install && npm run dev
+# 6. View it live
+cd ..\pyrodashboard && npm install && npm run dev
 ```
 
 ## Why DePIN, why Attestcoin
 
-DePIN's core unsolved problem — proving a node is real and online without a
-centralized auditor — is exactly the shape of problem Attestcoin's
+DePIN's core unsolved problem ; proving a node is real and online without a
+centralized auditor —is exactly the shape of problem Attestcoin's
 cross-chain verification is built for. Most projects in this space bolt
-attestation onto a broader product; Sentinel is deliberately narrow: one
+attestation onto a broader product; Pyro is deliberately narrow: one
 hard trust problem, solved with real cryptographic verification, proven
 live end-to-end on testnet.
 
